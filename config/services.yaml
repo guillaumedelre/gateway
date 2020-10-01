@@ -1,0 +1,102 @@
+# This file is the entry point to configure your own services.
+# Files in the packages/ subdirectory configure your dependencies.
+
+# Put parameters here that don't need to change on each machine where the app is deployed
+# https://symfony.com/doc/current/best_practices/configuration.html#application-related-configuration
+parameters:
+    servers:
+        http:
+            driver: http1
+            middlewares:
+                - 'x-request-id'
+            sockets:
+                -
+                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV4_HOST
+                    port: !php/const App\Domain\Sockets::DEFAULT_PORT
+                -
+                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV6_HOST
+                    port: !php/const App\Domain\Sockets::DEFAULT_PORT
+        https:
+            driver: http1
+            cert: 'path/cert.pem'
+            middlewares:
+                - 'x-request-id'
+            sockets:
+                -
+                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV4_HOST
+                    port: !php/const App\Domain\Sockets::DEFAULT_TLS_PORT
+                -
+                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV6_HOST
+                    port: !php/const App\Domain\Sockets::DEFAULT_TLS_PORT
+        http2:
+            driver: http2
+            cert: 'path/cert.pem'
+            middlewares:
+                - 'x-request-id'
+            sockets:
+                -
+                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV4_HOST
+                    port: !php/const App\Domain\Sockets::DEFAULT_TLS_PORT
+                -
+                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV6_HOST
+                    port: !php/const App\Domain\Sockets::DEFAULT_TLS_PORT
+
+services:
+    # default configuration for services in *this* file
+    _defaults:
+        autowire: true      # Automatically injects dependencies in your services.
+        autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+        bind:
+            $projectDir: "%kernel.project_dir%"
+
+    # makes classes in src/ available to be used as services
+    # this creates a service per class whose id is the fully-qualified class name
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+            - '../src/Tests/'
+
+    # controllers are imported separately to make sure services can be injected
+    # as action arguments even if you don't extend any base controller class
+    App\Controller\:
+        resource: '../src/Controller/'
+        tags: ['controller.service_arguments']
+
+    # add more service definitions when explicit configuration is needed
+    # please note that last definitions always *replace* previous ones
+
+    _instanceof:
+        App\Handler\ContextAwareRequestHandlerInterface:
+            tags: ['handler.request']
+        App\Handler\ContextAwareErrorHandlerInterface:
+            tags: ['handler.error']
+        App\Handler\ContextAwareMiddlewareHandlerInterface:
+            tags: ['handler.middleware']
+
+    App\Handler\ChainErrorHandler:
+        $handlers: !tagged_iterator handler.error
+    App\Handler\ChainRequestHandler:
+        $handlers: !tagged_iterator handler.request
+    App\Handler\ChainMiddlewareHandler:
+        $handlers: !tagged_iterator handler.middleware
+
+    App\Handler\ContextAwareRequestHandlerInterface: '@App\Handler\ChainRequestHandler'
+    App\Handler\ContextAwareErrorHandlerInterface: '@App\Handler\ChainErrorHandler'
+    App\Handler\ContextAwareMiddlewareHandlerInterface: '@App\Handler\ChainMiddlewareHandler'
+
+    # logger factory
+    Monolog\Logger:
+        factory: ['@App\Logger\ConsoleLoggerFactory', create]
+    Psr\Log\LoggerInterface: '@App\Logger\ConsoleLoggerFactory'
+
+    # amphp
+    Amp\Http\Server\Driver\DefaultHttpDriverFactory: ~
+    ## alias for amphp interfaces
+    Amp\Http\Server\ErrorHandler: '@App\Handler\ChainErrorHandler'
+    Amp\Http\Server\RequestHandler: '@App\Handler\ChainRequestHandler'
+    Amp\Http\Server\Driver\HttpDriverFactory: '@Amp\Http\Server\Driver\DefaultHttpDriverFactory'
+    Amp\Http\Server\ServerObserver: '@App\Http\ServerObserver'
+
