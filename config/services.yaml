@@ -4,42 +4,6 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices/configuration.html#application-related-configuration
 parameters:
-    servers:
-        http:
-            driver: http1
-            middlewares:
-                - 'x-request-id'
-            sockets:
-                -
-                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV4_HOST
-                    port: !php/const App\Domain\Sockets::DEFAULT_PORT
-                -
-                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV6_HOST
-                    port: !php/const App\Domain\Sockets::DEFAULT_PORT
-        https:
-            driver: http1
-            cert: 'path/cert.pem'
-            middlewares:
-                - 'x-request-id'
-            sockets:
-                -
-                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV4_HOST
-                    port: !php/const App\Domain\Sockets::DEFAULT_TLS_PORT
-                -
-                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV6_HOST
-                    port: !php/const App\Domain\Sockets::DEFAULT_TLS_PORT
-        http2:
-            driver: http2
-            cert: 'path/cert.pem'
-            middlewares:
-                - 'x-request-id'
-            sockets:
-                -
-                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV4_HOST
-                    port: !php/const App\Domain\Sockets::DEFAULT_TLS_PORT
-                -
-                    ip: !php/const App\Domain\Sockets::DEFAULT_IPV6_HOST
-                    port: !php/const App\Domain\Sockets::DEFAULT_TLS_PORT
 
 services:
     # default configuration for services in *this* file
@@ -69,34 +33,45 @@ services:
     # please note that last definitions always *replace* previous ones
 
     _instanceof:
-        App\Handler\ContextAwareRequestHandlerInterface:
+        Psr\Log\LoggerAwareInterface:
+            calls:
+                - ['setLogger', ['@Monolog\Logger']]
+        Symfony\Component\DependencyInjection\ContainerAwareInterface:
+            calls:
+                - ['setContainer', ['@service_container']]
+        Symfony\Component\Serializer\SerializerAwareInterface:
+            calls:
+                - ['setSerializer', ['@serializer']]
+        App\Handler\Request\RequestHandlerInterface:
             tags: ['handler.request']
-        App\Handler\ContextAwareErrorHandlerInterface:
+        App\Handler\Error\ErrorHandlerInterface:
             tags: ['handler.error']
-        App\Handler\ContextAwareMiddlewareHandlerInterface:
-            tags: ['handler.middleware']
 
-    App\Handler\ChainErrorHandler:
-        $handlers: !tagged_iterator handler.error
-    App\Handler\ChainRequestHandler:
-        $handlers: !tagged_iterator handler.request
-    App\Handler\ChainMiddlewareHandler:
-        $handlers: !tagged_iterator handler.middleware
+    # RequestHandler
+    App\Handler\Request\RequestHandlerInterface: '@App\Handler\Request\ChainRequestHandler'
+    App\Handler\Request\ChainRequestHandler:
+        arguments:
+            $handlers: !tagged_iterator handler.request
+        tags:
+            - { name: handler.request, priority: 0 }
+    App\Handler\Request\SymfonyRequestHandler:
+        tags:
+            - { name: handler.request, priority: -1 }
+    App\Handler\Request\NotFoundRequestHandler:
+        tags:
+            - { name: handler.request, priority: -99 }
 
-    App\Handler\ContextAwareRequestHandlerInterface: '@App\Handler\ChainRequestHandler'
-    App\Handler\ContextAwareErrorHandlerInterface: '@App\Handler\ChainErrorHandler'
-    App\Handler\ContextAwareMiddlewareHandlerInterface: '@App\Handler\ChainMiddlewareHandler'
+    # ErrorHandler
+    App\Handler\Error\ErrorHandlerInterface: '@App\Handler\Error\ChainErrorHandler'
+    App\Handler\Error\ChainErrorHandler:
+        arguments:
+            $handlers: !tagged_iterator handler.error
+        tags:
+            - { name: handler.error, priority: 0 }
+    App\Handler\Error\DefaultErrorHandler:
+        tags:
+            - { name: handler.error, priority: -1 }
 
-    # logger factory
+    # logger
     Monolog\Logger:
         factory: ['@App\Logger\ConsoleLoggerFactory', create]
-    Psr\Log\LoggerInterface: '@App\Logger\ConsoleLoggerFactory'
-
-    # amphp
-    Amp\Http\Server\Driver\DefaultHttpDriverFactory: ~
-    ## alias for amphp interfaces
-    Amp\Http\Server\ErrorHandler: '@App\Handler\ChainErrorHandler'
-    Amp\Http\Server\RequestHandler: '@App\Handler\ChainRequestHandler'
-    Amp\Http\Server\Driver\HttpDriverFactory: '@Amp\Http\Server\Driver\DefaultHttpDriverFactory'
-    Amp\Http\Server\ServerObserver: '@App\Http\ServerObserver'
-

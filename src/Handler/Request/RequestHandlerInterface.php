@@ -1,22 +1,20 @@
 <?php
 
-namespace App\Handler;
+namespace App\Handler\Request;
 
-use Amp\Http\Server\Middleware;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Promise;
 
-interface ContextAwareMiddlewareHandlerInterface extends Middleware
+interface RequestHandlerInterface extends RequestHandler
 {
     /**
-     * @param Request        $request
-     * @param RequestHandler $requestHandler
-     * @param array          $context Additional contextual data.
+     * @param Request $request
+     * @param array $context Additional contextual data.
      *
      * @return Promise<\Amp\Http\Server\Response>
      */
-    public function handleRequest(Request $request, RequestHandler $requestHandler, array $context = []): Promise;
+    public function handleRequest(Request $request, array $context = []): Promise;
 
     /**
      * @param Request $request

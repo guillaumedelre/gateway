@@ -1,13 +1,18 @@
 <?php
 
-namespace App\Handler;
+namespace App\Handler\Request;
 
+use Amp\Failure;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
 use Amp\Promise;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 
-final class ChainRequestHandler implements ContextAwareRequestHandlerInterface
+final class ChainRequestHandler implements RequestHandlerInterface, LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     protected iterable $handlers;
     protected array $handlerByRequestHash = [];
 
@@ -18,7 +23,11 @@ final class ChainRequestHandler implements ContextAwareRequestHandlerInterface
 
     public function handleRequest(Request $request, array $context = []): Promise
     {
-        return $this->getHandler($request, $context)->handleRequest($request, $context);
+        try {
+            return $this->getHandler($request, $context)->handleRequest($request, $context);
+        } catch (\Throwable $exception) {
+            return new Failure($exception);
+        }
     }
 
     public function supportsRequest(Request $request, array &$context = []): bool
@@ -32,7 +41,13 @@ final class ChainRequestHandler implements ContextAwareRequestHandlerInterface
         return true;
     }
 
-    private function getHandler(Request $request, array $context): RequestHandler
+    /**
+     * @param Request $request
+     * @param array   $context
+     *
+     * @return RequestHandler|RequestHandlerInterface
+     */
+    private function getHandler(Request $request, array &$context)
     {
         $requestHash = \spl_object_hash($request);
         if (isset($this->handlerByRequestHash[$requestHash])
@@ -41,9 +56,12 @@ final class ChainRequestHandler implements ContextAwareRequestHandlerInterface
             return $this->handlers[$this->handlerByRequestHash[$requestHash]];
         }
 
-        foreach ($this->handlers as $i => $handler) {
+        foreach ($this->handlers as $handler) {
+            if ($handler === $this) {
+                continue;
+            }
             if ($handler->supportsRequest($request, $context)) {
-                $this->handlerByRequestHash[$requestHash] = $i;
+                $this->handlerByRequestHash[$requestHash] = $handler;
 
                 return $handler;
             }

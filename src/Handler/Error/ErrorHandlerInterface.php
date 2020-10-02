@@ -1,12 +1,12 @@
 <?php
 
-namespace App\Handler;
+namespace App\Handler\Error;
 
 use Amp\Http\Server\ErrorHandler;
 use Amp\Http\Server\Request;
 use Amp\Promise;
 
-interface ContextAwareErrorHandlerInterface extends ErrorHandler
+interface ErrorHandlerInterface extends ErrorHandler
 {
     /**
      * @param int          $statusCode Error status code, 4xx or 5xx.

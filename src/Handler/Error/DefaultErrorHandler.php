@@ -1,43 +1,24 @@
 <?php
 
-namespace App\Handler;
+namespace App\Handler\Error;
 
-use Amp\Http\Server\Response;
-use Amp\Success;
 use Amp\Http\Server\Request;
+use Amp\Http\Server\Response;
 use Amp\Promise;
-use Symfony\Component\Serializer\Encoder\JsonEncoder;
-use Symfony\Component\Serializer\SerializerAwareInterface;
-use Symfony\Component\Serializer\SerializerAwareTrait;
+use Amp\Success;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 
-final class DefaultErrorHandler implements ContextAwareErrorHandlerInterface, SerializerAwareInterface
+final class DefaultErrorHandler implements ErrorHandlerInterface, LoggerAwareInterface
 {
-    use SerializerAwareTrait;
-
-    /** @var string[] */
-    private $cache = [];
+    use LoggerAwareTrait;
 
     /** {@inheritdoc} */
     public function handleError(int $statusCode, string $reason = null, Request $request = null, array $context = []): Promise
     {
-        $errorJson = [
-            'statusCode' => $statusCode,
-            'reason' => $reason,
-            'request' => $this->serializer->serialize($request, JsonEncoder::FORMAT),
-            'context' => $context,
-        ];
+        $this->logger->warning("$statusCode - {$request->getMethod()} request {$request->getUri()->__toString()} using http{$request->getProtocolVersion()}: $reason");
 
-        if (!isset($this->cache[$statusCode])) {
-            $this->cache[$statusCode] = $errorJson;
-        }
-
-        $response = new Response($statusCode, [
-            "content-type" => "application/json; charset=utf-8"
-        ], $this->cache[$statusCode]);
-
-        $response->setStatus($statusCode, $reason);
-
-        return new Success($response);
+        return new Success(new Response($statusCode, ["content-type" => "text/plain; charset=utf-8"], ''));
     }
 
     public function supportsRequest(Request $request, array &$context = []): bool
